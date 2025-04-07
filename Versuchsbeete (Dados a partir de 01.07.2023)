@@ -1,0 +1,62 @@
+#Base de dados: 10 últimos dias. Previsão: 10 horas.
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.gaussian_process import GaussianProcessRegressor
+from sklearn.gaussian_process.kernels import RBF, ConstantKernel as C
+
+path = "/content/drive/MyDrive/Colab arquivos/MPI_Soil.csv"
+df = pd.read_csv(path, encoding='latin1')
+df.head(10)
+
+df = df[::-1]
+
+ultimos_10_dias = df.head(240)
+
+colunas = ultimos_10_dias.columns[1:35]
+
+for coluna in colunas:
+    plt.figure(figsize=(15, 5))
+    plt.plot(range(240), ultimos_10_dias[coluna], label=coluna, marker='o')
+    plt.xlabel('Últimas 240 Horas')
+    plt.ylabel(coluna)
+    plt.title(f'Dados de {coluna} nas últimas 240 Horas (10 dias)')
+    plt.legend()
+    plt.show()
+
+ultimos_10_dias = df.head(24)
+
+normalizador = MinMaxScaler()
+
+for coluna in range(1, min(32, df.shape[1])):
+
+    nome_coluna = str(df.columns[coluna])
+
+    dados_coluna = ultimos_10_dias.iloc[:, coluna:coluna+1]
+
+    dados_normalizados = normalizador.fit_transform(dados_coluna.values.reshape(-1, 1))
+
+    X = dados_normalizados[:-8]
+    y = dados_normalizados[8:]
+
+    kernel = C(1.0, (1e-3, 1e3)) * RBF(1.0, (1e-2, 1e2))
+    modelo_gp = GaussianProcessRegressor(kernel=kernel, n_restarts_optimizer=10)
+    modelo_gp.fit(X, y)
+
+    horas_futuras = 10
+    X_futuro_gp = np.linspace(0, 1, horas_futuras).reshape(-1, 1)
+    previsao_gp_futuro, _ = modelo_gp.predict(X_futuro_gp, return_std=True)
+
+    previsao_gp_futuro_desnormalizado = normalizador.inverse_transform(previsao_gp_futuro.reshape(-1, 1))
+
+    plt.figure(figsize=(15, 5))
+    plt.plot(dados_coluna.values, label='Real', linestyle='--')
+    plt.plot(range(len(dados_coluna), len(dados_coluna) + horas_futuras), previsao_gp_futuro_desnormalizado, label=f'Previsão {nome_coluna}', marker = 'o')
+
+    plt.xlabel('Horas')
+    plt.ylabel(nome_coluna)
+    plt.title(f'Previsão de {nome_coluna} para as Próximas 10 Horas usando Processo Gaussiano')
+    plt.legend()
+    plt.show()
